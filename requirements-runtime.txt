@@ -1,0 +1,32 @@
+# 与 LingChat 内置 IndexTTS2 桥接层验证过的 Python 3.10 依赖。
+# torch / torchvision / torchaudio 由 Install-Runtime.ps1 从 AMD 官方索引单独安装。
+accelerate==1.8.1
+cn2an==0.5.22
+Cython==3.0.7
+descript-audiotools==0.7.2
+einops==0.8.2
+ffmpeg-python==0.2.0
+g2p-en==2.1.0
+huggingface_hub==0.36.2
+jieba==0.42.1
+json5==0.10.0
+librosa==0.10.2.post1
+matplotlib==3.10.0
+modelscope==1.27.0
+munch==4.0.0
+numba==0.63.0
+numpy==2.2.6
+omegaconf==2.3.1
+opencv-python==4.9.0.80
+pandas==2.3.2
+protobuf==3.19.6
+pyloudnorm==0.2.0
+safetensors==0.5.2
+sentencepiece==0.2.2
+soundfile==0.14.0
+tensorboard==2.20.0
+textstat==0.7.13
+tokenizers==0.21.0
+tqdm==4.69.1
+transformers==4.52.1
+wetext==0.1.4

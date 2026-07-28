@@ -1,0 +1,16 @@
+.cache/
+downloads/
+runtime/
+checkpoints/
+voices/
+*.part
+*.tmp
+*.wav
+*.mp3
+*.flac
+*.pth
+*.pt
+*.safetensors
+*.7z
+*.7z.*
+*.zip
