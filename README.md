@@ -8,6 +8,10 @@
 - AMD ROCm PyTorch：`repo.amd.com`
 - IndexTTS2 模型：`IndexTeam/IndexTTS-2`
 
+## 下载
+
+[下载最新安装包](https://github.com/sdfsfsk/LingChat-IndexTTS-AMD-Installer/releases/latest)
+
 ## 快速安装
 
 1. 安装包含“IndexTTS-AMD（内置）”功能的 LingChat。
