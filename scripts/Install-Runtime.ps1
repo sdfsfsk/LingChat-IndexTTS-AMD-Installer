@@ -11,60 +11,63 @@ Set-StrictMode -Version Latest
 . (Join-Path $PSScriptRoot 'Common.ps1')
 
 $binDir = Resolve-LingChatBin -LingChatPath $LingChatPath
-$engineDir = Join-Path $binDir 'engine'
-$runtimeDir = Join-Path $engineDir 'runtime'
+$dataDir = Resolve-IndexTtsDataDir -BinDir $binDir
+$runtimeDir = Join-Path $dataDir 'runtime'
 $pythonExe = Join-Path $runtimeDir 'python.exe'
-$pythonDll = Join-Path $runtimeDir 'python310.dll'
 $requirements = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..\requirements-runtime.txt')).Path
+$patchScript = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot 'Apply-AmdCompatPatches.py')).Path
 
-New-Item -ItemType Directory -Path $engineDir -Force | Out-Null
-Assert-FreeSpace -Path $engineDir -RequiredBytes 10GB
+New-Item -ItemType Directory -Path $dataDir -Force | Out-Null
+Assert-FreeSpace -Path $dataDir -RequiredBytes 10GB
 
 Write-Host "LingChat bin：$binDir" -ForegroundColor Green
+Write-Host "服务器目录：$dataDir" -ForegroundColor Green
 Write-Host "AMD wheel：$AmdWheelIndex" -ForegroundColor Green
 
-$installPython = $Force -or -not (Test-Path -LiteralPath $pythonExe) -or -not (Test-Path -LiteralPath $pythonDll)
+$installPython = $Force -or -not (Test-Path -LiteralPath $pythonExe)
 if ($installPython) {
-    $pythonUrl = 'https://www.python.org/ftp/python/3.10.11/python-3.10.11-amd64.exe'
+    $pythonZipUrl = 'https://www.python.org/ftp/python/3.10.11/python-3.10.11-embed-amd64.zip'
+    $pythonZipSha256 = '608619f8619075629c9c69f361352a0da6ed7e62f83a0e19c63e0ea32eb7629d'
     $cacheDir = Join-Path $env:TEMP 'LingChat-IndexTTS-Installer'
-    $pythonInstaller = Join-Path $cacheDir 'python-3.10.11-amd64.exe'
+    $pythonZip = Join-Path $cacheDir 'python-3.10.11-embed-amd64.zip'
     New-Item -ItemType Directory -Path $cacheDir -Force | Out-Null
 
-    Write-Host '下载 Python 3.10.11 官方安装程序……' -ForegroundColor Cyan
-    Invoke-ResumableDownload -Uri $pythonUrl -Destination $pythonInstaller -ExpectedSize 29037240
+    Write-Host '下载 Python 3.10.11 嵌入式包……' -ForegroundColor Cyan
+    Invoke-ResumableDownload -Uri $pythonZipUrl -Destination $pythonZip -ExpectedSize 8629277
 
-    $signature = Get-AuthenticodeSignature -LiteralPath $pythonInstaller
-    if ($signature.Status -ne [System.Management.Automation.SignatureStatus]::Valid) {
-        throw "Python 安装程序数字签名无效：$($signature.Status) / $($signature.StatusMessage)"
+    $actualHash = (Get-FileHash -LiteralPath $pythonZip -Algorithm SHA256).Hash.ToLowerInvariant()
+    if ($actualHash -ne $pythonZipSha256) {
+        throw "Python 嵌入式包 SHA-256 校验失败：预期 $pythonZipSha256，实际 $actualHash。"
     }
 
+    if (Test-Path -LiteralPath $runtimeDir) {
+        Remove-Item -LiteralPath $runtimeDir -Recurse -Force
+    }
     New-Item -ItemType Directory -Path $runtimeDir -Force | Out-Null
-    $installArguments = @(
-        '/quiet',
-        'InstallAllUsers=0',
-        "TargetDir=$runtimeDir",
-        'Include_launcher=0',
-        'Include_test=0',
-        'Include_doc=0',
-        'Include_tcltk=0',
-        'Include_pip=1',
-        'PrependPath=0',
-        'Shortcuts=0',
-        'AssociateFiles=0'
-    )
-    $process = Start-Process -FilePath $pythonInstaller -ArgumentList $installArguments -Wait -PassThru
-    if ($process.ExitCode -ne 0) {
-        throw "Python 3.10.11 安装失败，退出代码：$($process.ExitCode)"
-    }
+    Expand-Archive -LiteralPath $pythonZip -DestinationPath $runtimeDir -Force
+
+    # 嵌入式发行版默认不启用 site 也不含 Lib\site-packages，需要改写 ._pth
+    $pthPath = Join-Path $runtimeDir 'python310._pth'
+    @(
+        'python310.zip',
+        '.',
+        'Lib\site-packages',
+        'import site'
+    ) | Set-Content -LiteralPath $pthPath -Encoding ASCII
+
+    Write-Host '引导 pip……' -ForegroundColor Cyan
+    $getPip = Join-Path $cacheDir 'get-pip.py'
+    Invoke-ResumableDownload -Uri 'https://bootstrap.pypa.io/get-pip.py' -Destination $getPip
+    Invoke-CheckedCommand -FilePath $pythonExe -ArgumentList @($getPip) -Description '安装 pip'
 }
 
-if (-not (Test-Path -LiteralPath $pythonExe) -or -not (Test-Path -LiteralPath $pythonDll)) {
+if (-not (Test-Path -LiteralPath $pythonExe)) {
     throw "Python 运行时不完整：$runtimeDir"
 }
 
 $pythonVersion = (& $pythonExe -c "import sys; print(str(sys.version_info.major)+'.'+str(sys.version_info.minor)+'.'+str(sys.version_info.micro))").Trim()
 if (-not $pythonVersion.StartsWith('3.10.')) {
-    throw "LingChat 内嵌接口要求 Python 3.10，当前运行时是 $pythonVersion。"
+    throw "服务器要求 Python 3.10，当前运行时是 $pythonVersion。"
 }
 
 $env:PIP_DISABLE_PIP_VERSION_CHECK = '1'
@@ -83,7 +86,15 @@ Invoke-CheckedCommand -FilePath $pythonExe -ArgumentList @(
 
 Invoke-CheckedCommand -FilePath $pythonExe -ArgumentList @(
     '-m', 'pip', 'install', '--requirement', $requirements
-) -Description '安装 IndexTTS2 Python 依赖'
+) -Description '安装 IndexTTS Python 依赖'
+
+# openai-whisper 的传递依赖含 triton（Windows 无可用 wheel），只装本体；
+# 运行所需的 tiktoken / more-itertools / tqdm 已在 requirements-runtime.txt 中。
+Invoke-CheckedCommand -FilePath $pythonExe -ArgumentList @(
+    '-m', 'pip', 'install', '--no-deps', 'openai-whisper==20250625'
+) -Description '安装 openai-whisper（--no-deps）'
+
+Invoke-CheckedCommand -FilePath $pythonExe -ArgumentList @($patchScript) -Description '应用 AMD site-packages 兼容补丁'
 
 $probe = & $pythonExe -c @'
 import json
@@ -91,6 +102,12 @@ import torch
 import torchaudio
 import librosa
 import transformers
+import fastapi
+import uvicorn
+import tiktoken
+import fugashi
+import whisper
+import soundfile
 print(json.dumps({
     'python': __import__('sys').version.split()[0],
     'torch': torch.__version__,

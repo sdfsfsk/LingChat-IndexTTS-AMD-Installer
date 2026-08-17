@@ -55,6 +55,17 @@ function Resolve-LingChatBin {
     return $resolved
 }
 
+function Resolve-IndexTtsDataDir {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]$BinDir
+    )
+
+    # 独立服务器整体安装目录：运行时、源码、模型、音色都在其中，自包含、相对布局。
+    return Join-Path $BinDir 'data\third_party\IndexTTS-AMD'
+}
+
 function Assert-FreeSpace {
     [CmdletBinding()]
     param(

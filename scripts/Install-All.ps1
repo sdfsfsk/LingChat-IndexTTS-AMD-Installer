@@ -3,6 +3,8 @@ param(
     [AllowEmptyString()]
     [string]$LingChatPath = '',
     [string]$AmdWheelIndex = 'https://repo.amd.com/rocm/whl/gfx120X-all',
+    [ValidateSet('2.5', '2', 'all')]
+    [string]$ModelVersion = '2.5',
     [string]$ModelRevision = 'main'
 )
 
@@ -13,7 +15,7 @@ Set-StrictMode -Version Latest
 $binDir = Resolve-LingChatBin -LingChatPath $LingChatPath
 
 Write-Host '==============================================' -ForegroundColor Cyan
-Write-Host ' LingChat IndexTTS-AMD 完整安装' -ForegroundColor Cyan
+Write-Host ' LingChat IndexTTS-AMD 独立服务器完整安装' -ForegroundColor Cyan
 Write-Host '==============================================' -ForegroundColor Cyan
 Write-Host "目标目录：$binDir"
 Write-Host ''
@@ -25,8 +27,14 @@ if ($LASTEXITCODE -ne 0) {
     throw "AMD 运行时安装失败，退出代码：$LASTEXITCODE"
 }
 
+& (Join-Path $PSScriptRoot 'Install-Server.ps1') -LingChatPath $binDir
+if ($LASTEXITCODE -ne 0) {
+    throw "服务端安装失败，退出代码：$LASTEXITCODE"
+}
+
 & (Join-Path $PSScriptRoot 'Download-Models.ps1') `
     -LingChatPath $binDir `
+    -ModelVersion $ModelVersion `
     -Revision $ModelRevision
 if ($LASTEXITCODE -ne 0) {
     throw "模型下载失败，退出代码：$LASTEXITCODE"

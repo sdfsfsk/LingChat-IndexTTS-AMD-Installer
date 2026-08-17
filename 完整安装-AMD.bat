@@ -10,7 +10,7 @@ echo.
 if not "%EXIT_CODE%"=="0" (
   echo [失败] 安装没有完成，请保留窗口中的错误信息。
 ) else (
-  echo [完成] IndexTTS-AMD 运行时和官方模型已经就绪。
+  echo [完成] IndexTTS-AMD 独立服务器、运行时和官方模型已经就绪。
 )
 pause
 exit /b %EXIT_CODE%

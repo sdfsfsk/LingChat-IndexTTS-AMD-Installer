@@ -1,11 +1,16 @@
-# 与 LingChat 内置 IndexTTS2 桥接层验证过的 Python 3.10 依赖。
+# 与 LingChat IndexTTS-AMD 独立服务器验证过的 Python 3.10 依赖。
 # torch / torchvision / torchaudio 由 Install-Runtime.ps1 从 AMD 官方索引单独安装。
+# openai-whisper 由 Install-Runtime.ps1 以 --no-deps 单独安装
+# （它的传递依赖含 triton，Windows 上没有可用 wheel）；
+# tiktoken / more-itertools / tqdm 是它在本服务中实际需要的最小依赖，已列在下面。
 accelerate==1.8.1
 cn2an==0.5.22
 Cython==3.0.7
 descript-audiotools==0.7.2
 einops==0.8.2
+fastapi==0.140.0
 ffmpeg-python==0.2.0
+fugashi==1.5.2
 g2p-en==2.1.0
 huggingface_hub==0.36.2
 jieba==0.42.1
@@ -13,6 +18,7 @@ json5==0.10.0
 librosa==0.10.2.post1
 matplotlib==3.10.0
 modelscope==1.27.0
+more-itertools==11.1.0
 munch==4.0.0
 numba==0.63.0
 numpy==2.2.6
@@ -26,7 +32,10 @@ sentencepiece==0.2.2
 soundfile==0.14.0
 tensorboard==2.20.0
 textstat==0.7.13
+tiktoken==0.13.0
 tokenizers==0.21.0
 tqdm==4.69.1
 transformers==4.52.1
+unidic-lite==1.0.8
+uvicorn==0.51.0
 wetext==0.1.4
