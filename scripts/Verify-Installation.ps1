@@ -57,6 +57,9 @@ Write-Host '校验上游源码与 AMD 补丁……' -ForegroundColor Cyan
 $infer25 = Join-Path $repoDir 'indextts\infer_v2_5.py'
 Test-RequiredFile -Path $infer25 -Label 'repo\indextts\infer_v2_5.py' | Out-Null
 Test-FileContains -Path $infer25 -Marker 'use_vocoder_fp16' -Label 'infer_v2_5.py AMD 补丁' | Out-Null
+$infer2 = Join-Path $repoDir 'indextts\infer_v2.py'
+Test-RequiredFile -Path $infer2 -Label 'repo\indextts\infer_v2.py' | Out-Null
+Test-FileContains -Path $infer2 -Marker 'use_vocoder_fp16' -Label 'infer_v2.py AMD 补丁' | Out-Null
 $transformersFile = Join-Path $runtimeDir 'Lib\site-packages\transformers\modeling_utils.py'
 $audiotoolsFile = Join-Path $runtimeDir 'Lib\site-packages\audiotools\ml\decorators.py'
 Test-FileContains -Path $transformersFile -Marker 'import torch.distributed.tensor  # noqa: F401' -Label 'transformers AMD 补丁' | Out-Null
@@ -102,6 +105,12 @@ if ($found25 -eq 0) {
 }
 
 if (Test-Path -LiteralPath $pythonExe -PathType Leaf) {
+    Write-Host '校验服务端 Python 语法……' -ForegroundColor Cyan
+    & $pythonExe -m py_compile (Join-Path $dataDir 'server_indextts.py')
+    if ($LASTEXITCODE -ne 0) {
+        $failures.Add('server_indextts.py 语法')
+    }
+
     Write-Host '校验 Python 与 AMD PyTorch……' -ForegroundColor Cyan
     & $pythonExe -c @'
 import json
@@ -133,7 +142,7 @@ $voiceCount = 0
 if (Test-Path -LiteralPath $voicesDir -PathType Container) {
     $voiceCount = @(
         Get-ChildItem -LiteralPath $voicesDir -File |
-            Where-Object { $_.Extension.ToLowerInvariant() -in @('.wav', '.mp3', '.flac', '.m4a', '.ogg') }
+            Where-Object { $_.Extension.ToLowerInvariant() -in @('.wav', '.mp3', '.flac', '.ogg') }
     ).Count
 }
 if ($voiceCount -eq 0) {
@@ -152,3 +161,4 @@ if ($failures.Count -gt 0) {
 Write-Host ''
 Write-Host 'IndexTTS-AMD 独立服务器资源校验通过。' -ForegroundColor Green
 Write-Host "双击 $(Join-Path $dataDir '启动-IndexTTS-AMD.bat') 启动服务，健康检查：http://127.0.0.1:9880/health" -ForegroundColor Green
+
