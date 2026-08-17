@@ -52,7 +52,7 @@ $modelSpecs = @{
 $versions = if ($ModelVersion -eq 'all') { @('2.5', '2') } else { @($ModelVersion) }
 
 $headers = @{
-    'User-Agent' = 'LingChat-IndexTTS-AMD-Installer/2.0'
+    'User-Agent' = 'LingChat-IndexTTS-AMD-Installer/2.5'
 }
 
 foreach ($version in $versions) {
@@ -175,3 +175,5 @@ foreach ($version in $versions) {
 
 Write-Host "音色目录：$voicesDir" -ForegroundColor Green
 Write-Host '请把你有权使用的参考音频（wav/mp3/flac/ogg）放进音色目录。' -ForegroundColor Yellow
+
+
