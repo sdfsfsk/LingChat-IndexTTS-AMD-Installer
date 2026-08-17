@@ -1,6 +1,6 @@
 # LingChat IndexTTS-AMD 安装器
 
-这是为 [LingChat](https://github.com/sdfsfsk/LingChat) 准备的 **IndexTTS-AMD 独立服务器**安装器，面向 Windows 11 + AMD Radeon 显卡，默认安装 **IndexTTS-2.5**（中/英/日/西/阿多语言）。
+这是为 [LingChat](https://github.com/SlimeBoyOwO/LingChat) 准备的 **IndexTTS-AMD 独立服务器**安装器，面向 Windows 11 + AMD Radeon 显卡，默认安装 **IndexTTS-2.5**（中/英/日/西/阿多语言）。
 
 服务器以独立进程运行（FastAPI，`127.0.0.1` 本地回环），LingChat 通过内置的 `indextts2` HTTP 适配器调用它。
 
@@ -180,5 +180,4 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\Verify-Installatio
 ## 许可证
 
 本仓库中的安装脚本与服务端脚本采用 MIT License。IndexTTS2/2.5、模型权重、Python、PyTorch 与 AMD ROCm 均使用各自的许可证；详见 THIRD_PARTY_NOTICES.md。
-
 
