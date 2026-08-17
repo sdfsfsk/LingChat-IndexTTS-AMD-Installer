@@ -16,6 +16,7 @@ import re
 import time
 import io
 import json
+import inspect
 import logging
 import threading
 import traceback
@@ -39,13 +40,18 @@ log = logging.getLogger("indextts-server")
 # 模型版本（INDEXTTS_VERSION）：
 #   2.5 —— 默认，IndexTTS-2.5（checkpoints-2.5/，BF16，中日英等多语言，新增 lang 参数）
 #   2   —— 旧版 IndexTTS-2（checkpoints/，FP16，仅中英文）
-MODEL_VERSION = os.environ.get("INDEXTTS_VERSION", "2.5")
+MODEL_VERSION = os.environ.get("INDEXTTS_VERSION", "2.5").strip()
+if MODEL_VERSION not in {"2", "2.5"}:
+    raise RuntimeError("INDEXTTS_VERSION 仅支持 2.5 或 2")
 IS_V25 = MODEL_VERSION == "2.5"
-CHECKPOINTS = os.path.join(ROOT, "checkpoints-2.5" if IS_V25 else "checkpoints")
+DEFAULT_CHECKPOINTS = os.path.join(ROOT, "checkpoints-2.5" if IS_V25 else "checkpoints")
+CHECKPOINTS = os.path.abspath(os.environ.get("INDEXTTS_CHECKPOINTS", DEFAULT_CHECKPOINTS))
 VOICES_DIR = os.path.join(ROOT, "voices")
 OUTPUTS_DIR = os.path.join(ROOT, "outputs")
 CONFIG_YAML = os.path.join(CHECKPOINTS, "config.yaml")
 PORT = int(os.environ.get("INDEXTTS_PORT", "23987"))
+if not 1 <= PORT <= 65535:
+    raise RuntimeError("INDEXTTS_PORT 必须在 1 到 65535 之间")
 USE_FP16 = os.environ.get("INDEXTTS_FP16", "0") == "1"
 USE_BF16 = os.environ.get("INDEXTTS_BF16", "1") == "1"  # IndexTTS-2.5 官方推荐 BF16
 USE_VOCODER_FP16 = os.environ.get("INDEXTTS_VOCODER_FP16", "1") == "1"
@@ -132,6 +138,11 @@ EMO_SCALE = float(os.environ.get("INDEXTTS_EMO_SCALE", "1.0"))
 #   qwen  —— 标签扩写成情绪描述，交给官方 Qwen3-0.6B 情感模型自动理解出向量（更细腻，+0.1~0.5s）
 #   auto  —— 不看标签，直接让 Qwen 分析本句文本的情绪（情绪跟随内容，+0.1~0.5s）
 EMO_MODE = os.environ.get("INDEXTTS_EMO_MODE", "blend").lower()
+if EMO_MODE not in {"blend", "qwen", "auto"}:
+    raise RuntimeError("INDEXTTS_EMO_MODE 仅支持 blend、qwen 或 auto")
+
+SUPPORTED_LANGS_V25 = {"zh", "en", "ja", "es", "ar"}
+SUPPORTED_LANGS_V2 = {"zh", "en"}
 
 # qwen 模式：19 情绪标签 -> 自然语言情绪描述（未列出的同义词直接用标签原文）
 LABEL_EMO_TEXT = {
@@ -208,6 +219,10 @@ if IS_V25:
 else:
     from indextts.infer_v2 import IndexTTS2  # noqa: E402
 
+# 安装器会为 AMD 性能参数打补丁；直接复制本服务端到官方仓库时则自动回退
+# 到上游默认推理参数，避免 use_vocoder_fp16 或 diffusion_steps 导致启动/推理失败。
+SUPPORTS_AMD_TUNING = "use_vocoder_fp16" in inspect.signature(IndexTTS2.__init__).parameters
+
 # use_cuda_kernel=False：Windows ROCm 无法编译 BigVGAN 的 CUDA 核，走 torch 原生回退
 # use_deepspeed / use_accel / use_torch_compile：均为 NVIDIA/编译链路专用，全部关闭
 _common_kwargs = dict(
@@ -217,8 +232,9 @@ _common_kwargs = dict(
     use_deepspeed=False,
     use_accel=False,
     use_torch_compile=False,
-    use_vocoder_fp16=USE_VOCODER_FP16,
 )
+if SUPPORTS_AMD_TUNING:
+    _common_kwargs["use_vocoder_fp16"] = USE_VOCODER_FP16
 if IS_V25:
     # 2.5 用 BF16；仅 qwen/auto 情绪模式才加载 Qwen3-0.6B（省约 1.1GB 显存）
     tts = IndexTTS2(use_bf16=USE_BF16, use_qwen_emo=EMO_MODE in ("qwen", "auto"), **_common_kwargs)
@@ -255,7 +271,15 @@ def resolve_emo_vector(emo_id: str, vecs):
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "device": str(tts.device), "presets": [os.path.basename(p) for p in list_presets()]}
+    return {
+        "status": "ok",
+        "model_version": MODEL_VERSION,
+        "device": str(tts.device),
+        "checkpoints": os.path.basename(os.path.normpath(CHECKPOINTS)),
+        "emotion_mode": EMO_MODE,
+        "amd_tuning": SUPPORTS_AMD_TUNING,
+        "presets": [os.path.basename(p) for p in list_presets()],
+    }
 
 
 @app.get("/voice/indextts/presets")
@@ -282,7 +306,22 @@ def voice_presets(
     presets = list_presets()
     if not presets:
         return JSONResponse(status_code=500, content={"error": "voices/ 目录下没有音色预设 wav"})
-    spk = presets[id] if 0 <= id < len(presets) else presets[0]
+    if not 0 <= id < len(presets):
+        return JSONResponse(
+            status_code=400,
+            content={"error": f"音色 id 超出范围：{id}，可用范围为 0..{len(presets) - 1}"},
+        )
+    spk = presets[id]
+
+    request_lang = (lang or "zh").strip().lower()
+    supported_langs = SUPPORTED_LANGS_V25 if IS_V25 else SUPPORTED_LANGS_V2
+    if request_lang not in supported_langs:
+        return JSONResponse(
+            status_code=400,
+            content={"error": f"IndexTTS-{MODEL_VERSION} 不支持语言 '{request_lang}'，可用值：{sorted(supported_langs)}"},
+        )
+    if (audio_format or "wav").strip().lower() != "wav":
+        return JSONResponse(status_code=400, content={"error": "当前服务端仅支持 audio_format=wav"})
 
     emo_alpha = max(0.0, min(1.0, emo_weight))
     label = re.sub(r"[【】\[\]\s]", "", (emo_id or "").strip())
@@ -325,13 +364,16 @@ def voice_presets(
                 use_random=False,
                 interval_silence=200,
                 max_text_tokens_per_segment=int(max_text_tokens_per_segment),
-                num_beams=NUM_BEAMS,
-                diffusion_steps=DIFFUSION_STEPS,
-                inference_cfg_rate=INFERENCE_CFG_RATE,
                 **infer_kwargs,
             )
+            if SUPPORTS_AMD_TUNING:
+                infer_call.update(
+                    num_beams=NUM_BEAMS,
+                    diffusion_steps=DIFFUSION_STEPS,
+                    inference_cfg_rate=INFERENCE_CFG_RATE,
+                )
             if IS_V25:
-                infer_call["lang"] = (lang or "zh").lower()
+                infer_call["lang"] = request_lang
             result = tts.infer(**infer_call)
             infer_seconds = time.perf_counter() - infer_t0
         if result is None:
@@ -356,16 +398,26 @@ def main():
              f"EMO_SCALE={EMO_SCALE}")
     log.info(f">> [server] 加速参数: fp16={USE_FP16}, vocoder_fp16={USE_VOCODER_FP16}, "
              f"num_beams={NUM_BEAMS}, diffusion_steps={DIFFUSION_STEPS}, "
-             f"qwen_cache={len(_qwen_vec_cache)}")
+             f"amd_tuning={SUPPORTS_AMD_TUNING}, qwen_cache={len(_qwen_vec_cache)}")
     # 预热一次，避免首个请求过慢
     if presets:
         try:
             with _gpu_lock:
-                tts.infer(spk_audio_prompt=presets[0], text="预热。", output_path=None,
-                          max_text_tokens_per_segment=50, num_beams=NUM_BEAMS,
-                          diffusion_steps=DIFFUSION_STEPS,
-                          inference_cfg_rate=INFERENCE_CFG_RATE,
-                          **({"lang": "zh"} if IS_V25 else {}))
+                warmup_call = dict(
+                    spk_audio_prompt=presets[0],
+                    text="预热。",
+                    output_path=None,
+                    max_text_tokens_per_segment=50,
+                )
+                if SUPPORTS_AMD_TUNING:
+                    warmup_call.update(
+                        num_beams=NUM_BEAMS,
+                        diffusion_steps=DIFFUSION_STEPS,
+                        inference_cfg_rate=INFERENCE_CFG_RATE,
+                    )
+                if IS_V25:
+                    warmup_call["lang"] = "zh"
+                tts.infer(**warmup_call)
             log.info(">> [server] 预热完成")
         except Exception as e:
             log.warning(f">> [server] 预热失败（不影响后续使用）: {e!r}")
@@ -374,3 +426,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+
