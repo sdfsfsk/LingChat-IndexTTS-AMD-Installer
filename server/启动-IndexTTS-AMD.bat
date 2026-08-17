@@ -35,13 +35,14 @@ if not defined INDEXTTS_VERSION set "INDEXTTS_VERSION=2.5"
 rem ===== emotion mode: blend / qwen / auto =====
 if not defined INDEXTTS_EMO_MODE set "INDEXTTS_EMO_MODE=qwen"
 
-rem ===== fast inference on RDNA4 (set 0 to revert to fp32) =====
-set INDEXTTS_FP16=1
-set INDEXTTS_VOCODER_FP16=1
+rem ===== precision: 2.5 uses BF16; legacy v2 and BigVGAN use FP16 =====
+if not defined INDEXTTS_BF16 set "INDEXTTS_BF16=1"
+if not defined INDEXTTS_FP16 set "INDEXTTS_FP16=1"
+if not defined INDEXTTS_VOCODER_FP16 set "INDEXTTS_VOCODER_FP16=1"
 
 rem ===== speed profile (quality fallback: beams=3, diffusion=25) =====
-set INDEXTTS_NUM_BEAMS=1
-set INDEXTTS_DIFFUSION_STEPS=16
+if not defined INDEXTTS_NUM_BEAMS set "INDEXTTS_NUM_BEAMS=1"
+if not defined INDEXTTS_DIFFUSION_STEPS set "INDEXTTS_DIFFUSION_STEPS=16"
 
 if not exist "%~dp0miopen\db_infer" mkdir "%~dp0miopen\db_infer"
 if not exist "%~dp0miopen\cache_infer" mkdir "%~dp0miopen\cache_infer"
@@ -54,3 +55,4 @@ if not "%INDEXTTS_EXIT_CODE%"=="0" (
     pause
 )
 exit /b %INDEXTTS_EXIT_CODE%
+
