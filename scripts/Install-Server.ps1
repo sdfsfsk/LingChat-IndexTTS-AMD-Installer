@@ -18,6 +18,7 @@ $pythonExe = Join-Path $runtimeDir 'python.exe'
 $repoDir = Join-Path $dataDir 'repo'
 $repoPatchScript = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot 'Apply-RepoAmdCompat.py')).Path
 $serverDir = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..\server')).Path
+$serverManifestPath = Join-Path $dataDir 'server-manifest.json'
 
 if (-not (Test-Path -LiteralPath $pythonExe -PathType Leaf)) {
     throw "没有找到服务器 Python 运行时（$runtimeDir）。请先运行 Install-Runtime.ps1。"
@@ -27,7 +28,18 @@ Write-Host "服务器目录：$dataDir" -ForegroundColor Green
 Write-Host "上游源码提交：$RepoRevision" -ForegroundColor Green
 
 # ---- 上游 indextts 包（zip 快照，不含 .git） ----
-$needRepo = $Force -or -not (Test-Path -LiteralPath (Join-Path $repoDir 'indextts\infer_v2_5.py') -PathType Leaf)
+$installedRevision = $null
+if (Test-Path -LiteralPath $serverManifestPath -PathType Leaf) {
+    try {
+        $installedRevision = (Get-Content -LiteralPath $serverManifestPath -Raw | ConvertFrom-Json).upstream_revision
+    } catch {
+        Write-Warning "无法读取旧服务端清单，将重新安装上游源码：$($_.Exception.Message)"
+    }
+}
+$needRepo =
+    $Force -or
+    -not (Test-Path -LiteralPath (Join-Path $repoDir 'indextts\infer_v2_5.py') -PathType Leaf) -or
+    $installedRevision -ne $RepoRevision
 if ($needRepo) {
     $cacheDir = Join-Path $env:TEMP 'LingChat-IndexTTS-Installer'
     New-Item -ItemType Directory -Path $cacheDir -Force | Out-Null
@@ -92,8 +104,9 @@ $manifest = [ordered]@{
     upstream_revision = $RepoRevision
     amd_patch = 'repo + site-packages（见 scripts/Apply-*.py）'
 }
-$manifest | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $dataDir 'server-manifest.json') -Encoding UTF8
+$manifest | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $serverManifestPath -Encoding UTF8
 
 Write-Host ''
 Write-Host '服务端安装完成。' -ForegroundColor Green
 Write-Host "启动脚本：$(Join-Path $dataDir '启动-IndexTTS-AMD.bat')" -ForegroundColor Green
+
