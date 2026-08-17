@@ -23,7 +23,7 @@
 4. 双击安装产物里的 `启动-IndexTTS-AMD.bat` 启动服务器（见下文目录布局）。
 5. 在 LingChat 全局设置中确认 `tts.indextts_api_url` 为
    `http://127.0.0.1:9880/voice/indextts/presets`（**必须是包含路径的完整地址**）。
-6. 角色设置中选择 `tts_type: indextts2`，`voice_lang` 按需选 `zh` / `ja` / `en` 等。
+6. 角色设置中选择 `tts_type: indextts2`，`voice_lang` 按需选 `zh` / `ja` / `en` 等；有多个音色时，用 `voice_models.indextts_speaker_id` 选择按文件名排序后的编号（从 0 开始）。
 7. 把你有权使用的参考音频（wav/mp3/flac/ogg）放进 `voices` 目录即成为音色预设（按文件名排序，序号即预设 id，从 0 开始）。
 
 也可以在命令行中明确指定目录：
@@ -52,9 +52,9 @@ LingChat\
 
 ## 启动与停止
 
-- 启动：双击 `启动-IndexTTS-AMD.bat`，默认监听 `127.0.0.1:9880`（与 LingChat 默认端口一致）
+- 启动：双击 `启动-IndexTTS-AMD.bat`，安装器默认监听 `127.0.0.1:9880`；LingChat 中需配置相同端口的完整 API 地址
 - 首次启动会自动下载缺失的辅助模型（BigVGAN、w2v-bert-2.0 等，数 GB），耐心等一次即可
-- 健康检查：浏览器打开 `http://127.0.0.1:9880/health`
+- 健康检查：浏览器打开 `http://127.0.0.1:9880/health`，响应会显示模型版本、模型目录、情绪模式、AMD 调优状态和音色列表
 - 重复启动会先按端口清理旧实例（仅当命令行确认是本目录的 `server_indextts.py`，不会误杀别的程序）
 - 换端口：先 `set INDEXTTS_PORT=新端口` 再运行启动脚本，并同步修改 LingChat 里的 `tts.indextts_api_url`
 - 停止：双击 `停止-IndexTTS-AMD.bat`，或直接关掉命令行窗口
@@ -67,7 +67,7 @@ LingChat\
 仅下载模型.bat "D:\Apps\LingChat" 2
 ```
 
-两个版本都装时，默认使用 2.5；在启动前 `set INDEXTTS_VERSION=2` 即可切回旧版。
+两个版本都装时，默认使用 2.5；如需回退，请在同一个命令提示符中执行 `set INDEXTTS_VERSION=2` 后再运行启动脚本。也可用 `INDEXTTS_CHECKPOINTS` 覆盖模型目录，方便接入官方源码布局。
 
 ## 分开安装
 
@@ -140,7 +140,7 @@ LingChat 每次对话会带上中文情绪标签（`emo_id`），服务端按启
 
 ## 音色隐私
 
-本仓库不会提供、上传或收集任何私人参考音频。请只上传你拥有授权的 WAV、MP3、FLAC、M4A 或 OGG 文件。音色文件保存在本机 LingChat 数据目录中。
+本仓库不会提供、上传或收集任何私人参考音频。请只上传你拥有授权的 WAV、MP3、FLAC 或 OGG 文件。音色文件保存在本机 LingChat 数据目录中。
 
 ## 常见问题
 
@@ -180,3 +180,5 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\Verify-Installatio
 ## 许可证
 
 本仓库中的安装脚本与服务端脚本采用 MIT License。IndexTTS2/2.5、模型权重、Python、PyTorch 与 AMD ROCm 均使用各自的许可证；详见 THIRD_PARTY_NOTICES.md。
+
+
